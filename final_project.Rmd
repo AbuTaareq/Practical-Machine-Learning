@@ -1,0 +1,160 @@
+---
+title: "Coursera - Practical Machine Learning - Prediction Assignment Writeup"
+author: "Shihab Hassan"
+date: "September 18, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+This is the final project assignment for the course at coursera for practical machine learning as part of the Data Science specialization. In this project we will submit our final project and review our peers to complete this course. 
+
+## Objective
+The goal of this project is to predict the manner in which people did the exercise. Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.This is the "classe" variable in the training set. We will create a report describing how you built model and explain how we used cross validation with more details of our decision.We will also use your prediction model to predict 20 different test cases as part of the requirement.
+
+## Data
+Human Activity Recognition - HAR - has emerged as a key research area in the last years and is gaining increasing attention by the pervasive computing research community especially for the development of context-aware systems. There are many potential applications for HAR, like: elderly monitoring, life log systems for monitoring energy expenditure and for supporting weight-loss programs, and digital assistants for weight lifting exercises.
+
+More information is available from the website http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). The outcome is measured against 60 observations and classifed as "A,B,C,D,E" catogerise and it is stored in the classe variable in the data set.
+
+## Libraries
+
+```{r tidy=TRUE}
+# Load necessary libraries
+library(caret)
+library(rpart)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(RColorBrewer)
+library(randomForest)
+
+# Set Seed
+set.seed(12345)
+```
+
+## Loading Data
+```{r}
+# Create and Assign variables for the URL to load data.
+UrlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+UrlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Load data
+training <- read.csv(url(UrlTrain), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(UrlTest), na.strings=c("NA","#DIV/0!",""))
+```
+##Partitioning and Training the data
+```{r}
+# 60% for Training and 40% for Testing
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]; myTesting <- training[-inTrain, ]
+dim(myTraining)
+```
+
+```{r}
+dim(myTesting)
+```
+
+## Cleaning
+```{r}
+myDataNZV <- nearZeroVar(myTraining, saveMetrics=TRUE)
+
+myNZVvars <- names(myTraining) %in% c("new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
+"kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
+"max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "avg_roll_arm", "stddev_roll_arm",
+"var_roll_arm", "avg_pitch_arm", "stddev_pitch_arm", "var_pitch_arm", "avg_yaw_arm",
+"stddev_yaw_arm", "var_yaw_arm", "kurtosis_roll_arm", "kurtosis_picth_arm",
+"kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
+"max_roll_arm", "min_roll_arm", "min_pitch_arm", "amplitude_roll_arm", "amplitude_pitch_arm",
+"kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
+"skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
+"amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
+"skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_roll_forearm",
+"max_yaw_forearm", "min_roll_forearm", "min_yaw_forearm", "amplitude_roll_forearm",
+"amplitude_yaw_forearm", "avg_roll_forearm", "stddev_roll_forearm", "var_roll_forearm",
+"avg_pitch_forearm", "stddev_pitch_forearm", "var_pitch_forearm", "avg_yaw_forearm",
+"stddev_yaw_forearm", "var_yaw_forearm")
+myTraining <- myTraining[!myNZVvars]
+#To check the new N?? of observations
+dim(myTraining)
+```
+
+## Transformation
+```{r}
+myTraining <- myTraining[c(-1)]
+trainingV3 <- myTraining #creating another subset to iterate in loop
+for(i in 1:length(myTraining)) { #for every column in the training dataset
+        if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .6 ) { #if n?? NAs > 60% of total observations
+        for(j in 1:length(trainingV3)) {
+            if( length( grep(names(myTraining[i]), names(trainingV3)[j]) ) ==1)  { #if the columns are the same:
+                trainingV3 <- trainingV3[ , -j] #Remove that column
+            }   
+        } 
+    }
+}
+#To check the new N?? of observations
+dim(trainingV3)
+```
+
+```{r}
+#Seting back to our set:
+myTraining <- trainingV3
+rm(trainingV3)
+```
+
+## Testing Data Set
+```{r}
+clean1 <- colnames(myTraining)
+clean2 <- colnames(myTraining[, -58]) 
+myTesting <- myTesting[clean1]
+testing <- testing[clean2]
+dim(myTesting)
+```
+```{r}
+dim(testing)
+```
+
+In order to ensure proper functioning of Decision Trees and especially RandomForest Algorithm with the Test data set (data set provided), we need to coerce the data into the same type.
+
+```{r}
+for (i in 1:length(testing) ) {
+        for(j in 1:length(myTraining)) {
+        if( length( grep(names(myTraining[i]), names(testing)[j]) ) ==1)  {
+            class(testing[j]) <- class(myTraining[i])
+        }      
+    }      
+}
+#And to make sure Coertion really worked, simple smart ass technique:
+testing <- rbind(myTraining[2, -58] , testing) #note row 2 does not mean anything, this will be removed right.. now:
+testing <- testing[-1,]
+```
+
+## Building Decision Tree
+```{r}
+modFitA1 <- rpart(classe ~ ., data=myTraining, method="class")
+fancyRpartPlot(modFitA1)
+```
+## Predict Analysis
+```{r}
+predictionsA1 <- predict(modFitA1, myTesting, type = "class")
+
+# Apply confustion matrix
+confusionMatrix(predictionsA1, myTesting$classe)
+```
+## Random Forests
+```{r}
+modFitB1 <- randomForest(classe ~. , data=myTraining)
+# Sample Error
+predictionsB1 <- predict(modFitB1, myTesting, type = "class")
+
+# Confustion matrix
+confusionMatrix(predictionsB1, myTesting$classe)
+
+```
+Random Forests yielded better Results, as expected!
