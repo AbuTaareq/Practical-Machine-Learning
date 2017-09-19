@@ -2,7 +2,10 @@
 title: "Coursera - Practical Machine Learning - Prediction Assignment Writeup"
 author: "Shihab Hassan"
 date: "September 18, 2017"
-output: html_document
+output:
+  md_document: default
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
